@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -339,3 +340,38 @@ test("a kept range starting on a 30 fps frame keeps that frame", { skip: !HAS_FF
   );
   assert.equal(frames, 88, `expected 88 frames, got ${frames}`);
 });
+
+const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+
+for (const [name, alias] of [
+  ["a .. segment", (dir) => join(dir, "sub", "..", "a.wav")],
+  ["a symlinked directory", (dir) => join(dir, "link", "a.wav")],
+]) {
+  test(`--out naming the --input file through ${name} is refused`, { skip: !HAS_FFMPEG }, (t) => {
+    const { dir, cleanup } = fixture();
+    t.after(cleanup);
+    mkdirSync(join(dir, "sub"));
+    symlinkSync(dir, join(dir, "link"));
+    const source = join(dir, "a.wav");
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=2", source]);
+    const before = sha256(source);
+    const transcriptPath = join(dir, "transcript.json");
+    writeFileSync(transcriptPath, JSON.stringify({ words: [{ text: "tone", start: 0, end: 2 }] }));
+
+    const result = run([
+      "--input",
+      source,
+      "--transcript",
+      transcriptPath,
+      "--remove",
+      "0.5-1",
+      "--out",
+      alias(dir),
+      "--json",
+    ]);
+
+    assert.equal(sha256(source), before, "the input file was overwritten");
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(JSON.parse(result.stdout).error, /--out is the --input file/);
+  });
+}
