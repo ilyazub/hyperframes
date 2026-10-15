@@ -67,6 +67,88 @@ test("--remove-fillers drops case-insensitive matching words", () => {
   ]);
 });
 
+const UK = [
+  word("w0", "Ну,", 0, 0.4),
+  word("w1", "тобто", 0.5, 1),
+  word("w2", "мʼяч", 1.1, 1.5),
+  word("w3", "—", 1.6, 1.7),
+  word("w4", "летить.", 1.8, 2.4),
+  word("w5", "Кінець", 3, 4),
+];
+
+test("--remove-text cuts a phrase that occurs exactly once", () => {
+  assert.deepEqual(compileCutList(UK, { removeText: "ну тобто" }), [{ start: 1, end: 4 }]);
+});
+
+test("--remove-text ignores case and punctuation", () => {
+  assert.deepEqual(compileCutList(UK, { removeText: "НУ, Тобто!" }), [{ start: 1, end: 4 }]);
+});
+
+test("--remove-text folds apostrophe variants", () => {
+  for (const apos of ["ʼ", "’", "'"]) {
+    assert.deepEqual(compileCutList(UK, { removeText: `м${apos}яч` }), [
+      { start: 0, end: 1.1 },
+      { start: 1.5, end: 4 },
+    ]);
+  }
+});
+
+test("--remove-text matches NFD input against NFC transcript", () => {
+  const words = [word("w0", "й", 0, 1), word("w1", "ще", 1, 2), word("w2", "так", 2, 3)];
+  assert.deepEqual(compileCutList(words, { removeText: "й".normalize("NFD") }), [
+    { start: 1, end: 3 },
+  ]);
+});
+
+test("--remove-text skips lone-punctuation words between tokens", () => {
+  assert.deepEqual(compileCutList(UK, { removeText: "мʼяч летить" }), [
+    { start: 0, end: 1.1 },
+    { start: 2.4, end: 4 },
+  ]);
+});
+
+test("--remove-text errors when the phrase is not found", () => {
+  assert.throws(() => compileCutList(UK, { removeText: "якщо" }), /not found: якщо/);
+});
+
+test("--remove-text refuses an ambiguous phrase and lists index ranges", () => {
+  const words = [
+    word("w0", "Ну", 0, 1),
+    word("w1", "тобто", 1, 2),
+    word("w2", "так", 2, 3),
+    word("w3", "ну", 3, 4),
+    word("w4", "тобто.", 4, 5),
+  ];
+  assert.throws(
+    () => compileCutList(words, { removeText: "ну тобто" }),
+    /ambiguous: ну тобто occurs 2 times \(0-1, 3-4\)/,
+  );
+});
+
+test("--remove-text takes several | separated phrases and combines with --remove-fillers", () => {
+  const words = [
+    word("w0", "Ну", 0, 1),
+    word("w1", "тобто", 1, 2),
+    word("w2", "це", 2, 3),
+    word("w3", "типу", 3, 4),
+    word("w4", "добре", 4, 5),
+    word("w5", "ем", 5, 6),
+    word("w6", "кінець", 6, 7),
+  ];
+  assert.deepEqual(compileCutList(words, { removeText: "ну тобто|типу", removeFillers: "ем" }), [
+    { start: 2, end: 3 },
+    { start: 4, end: 5 },
+    { start: 6, end: 7 },
+  ]);
+});
+
+test("--remove-text is refused with --keep", () => {
+  assert.throws(
+    () => compileCutList(UK, { removeText: "ну тобто", keep: "0-1" }),
+    /mutually exclusive/,
+  );
+});
+
 test("--cut-silence removes only the center of long inter-word gaps", () => {
   const transcript = [word("w0", "a", 0, 0.5), word("w1", "b", 2, 2.5), word("w2", "c", 2.7, 3)];
 
