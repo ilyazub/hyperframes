@@ -1,8 +1,8 @@
 // fallow-ignore-file code-duplication
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
 const producerState = vi.hoisted(() => ({
@@ -652,6 +652,85 @@ describe("renderLocal browser GPU config", () => {
       resolved: true,
     });
   }, 15_000);
+
+  describe("renderLocal HF_TOOL_CONTEXT output event", () => {
+    const baseOptions = {
+      fps: { num: 30, den: 1 },
+      quality: "standard",
+      gpu: false,
+      browserGpuMode: "software",
+      hdrMode: "auto",
+      quiet: true,
+      skipFeedback: true,
+    } as const;
+    let dir: string;
+    let eventsPath: string;
+    const events = () =>
+      existsSync(eventsPath)
+        ? readFileSync(eventsPath, "utf8")
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((l) => JSON.parse(l))
+        : [];
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "hf-render-events-"));
+      eventsPath = join(dir, "events.ndjson");
+      vi.stubEnv(
+        "HF_TOOL_CONTEXT",
+        JSON.stringify({
+          version: 1,
+          capabilities: { events: { transport: { type: "ndjson-file", path: eventsPath } } },
+        }),
+      );
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      producerState.executeImpl = async () => undefined;
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("reports the written file once on success", async () => {
+      await renderModule.renderLocal("/tmp/project", "/tmp/out.mp4", {
+        ...baseOptions,
+        format: "mp4",
+      });
+      expect(events()).toEqual([
+        {
+          version: 1,
+          type: "artifact.created",
+          command: "render",
+          artifact: { role: "render", path: resolve("/tmp/out.mp4"), mediaType: "video/mp4" },
+        },
+      ]);
+    });
+
+    it("reports nothing when the render fails", async () => {
+      producerState.executeImpl = async () => {
+        throw new Error("boom");
+      };
+      await renderModule
+        .renderLocal("/tmp/project", "/tmp/out.mp4", { ...baseOptions, format: "mp4" })
+        .catch(() => undefined);
+      expect(events()).toEqual([]);
+    });
+
+    it.each(["png-sequence", "hls"] as const)("reports nothing for %s output", async (format) => {
+      await renderModule.renderLocal("/tmp/project", "/tmp/out", { ...baseOptions, format });
+      expect(events()).toEqual([]);
+    });
+
+    it("writes nothing without HF_TOOL_CONTEXT", async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv("HF_TOOL_CONTEXT", "");
+      await renderModule.renderLocal("/tmp/project", "/tmp/out.mp4", {
+        ...baseOptions,
+        format: "mp4",
+      });
+      expect(events()).toEqual([]);
+    });
+  });
 
   it("forwards render stage start and end lifecycle events to telemetry", async () => {
     producerState.executeImpl = async (job) => {

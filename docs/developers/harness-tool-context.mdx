@@ -57,6 +57,7 @@ Each line is an event:
 | `check` | `check-report` | The saved JSON report |
 | `check` | `frame` | Each frame the browser check captured |
 | `check` | `finding` | Each crop around a finding |
+| `render` | `render` | The rendered file (MP4, WebM, MOV or GIF), at the path the render wrote. Directory outputs (`png-sequence`, `hls`) are not reported |
 
 Paths are absolute and stay where the command saved them. What to do with an artifact is the
 harness's decision: attach the contact sheet to the tool result, link the report, or ignore it.
