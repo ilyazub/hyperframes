@@ -207,9 +207,15 @@ export function spawnP(
     }
     return Promise.resolve({ status: -1 });
   }
+  const { capture, ...spawnOpts } = resolved.opts;
+  if (capture) spawnOpts.stdio = ["ignore", "pipe", "pipe"];
   return new Promise((resolve) => {
-    const p = spawnFn(resolved.cmd, resolved.args, resolved.opts);
-    p.on("exit", (code) => resolve({ status: code ?? -1 }));
+    const p = spawnFn(resolved.cmd, resolved.args, spawnOpts);
+    let stdout = "";
+    let stderr = "";
+    p.stdout?.on("data", (d) => (stdout += d));
+    p.stderr?.on("data", (d) => (stderr += d));
+    p.on("exit", (code) => resolve({ status: code ?? -1, stdout, stderr }));
     p.on("error", () => resolve({ status: -1 }));
   });
 }
@@ -352,27 +358,39 @@ export async function synthesizeHeygen({ text, voiceId, lang, speed, wavAbs }, d
   }
 }
 
-// ElevenLabs/Kokoro have no word timings — run Whisper over the wav. Returns the
-// flat [{id,text,start,end}] word array, or null. Each call uses a throwaway
-// --dir so parallel scenes don't collide on transcript.json.
+// ElevenLabs/Kokoro have no word timings — run Whisper over the wav. Returns
+// { words, error }: the flat [{id,text,start,end}] array, or null plus why.
+// Each call uses a throwaway --dir so parallel scenes don't collide on
+// transcript.json.
 export async function transcribeWav({ wavRel, lang = "en", hyperframesDir }) {
   const model = lang === "en" ? "small.en" : "small";
   const td = mkdtempSync(join(tmpdir(), "hf-trans-"));
-  const args = ["hyperframes", "transcribe", wavRel, "--model", model, "--dir", td];
+  const args = ["hyperframes", "transcribe", wavRel, "--model", model, "--dir", td, "--json"];
   if (lang !== "en") args.push("--language", lang);
-  const r = await spawnP("npx", args, { cwd: hyperframesDir });
-  let words = null;
-  if (r.status === 0) {
+  try {
+    const r = await spawnP("npx", args, { cwd: hyperframesDir, capture: true });
+    if (r.status !== 0) return { words: null, error: transcribeFailure(r) };
     const src = join(td, "transcript.json");
-    if (existsSync(src)) {
-      try {
-        const arr = JSON.parse(readFileSync(src, "utf8"));
-        if (Array.isArray(arr) && arr.length) words = arr;
-      } catch {}
-    }
+    if (!existsSync(src)) return { words: null, error: "no transcript.json written" };
+    try {
+      const arr = JSON.parse(readFileSync(src, "utf8"));
+      if (Array.isArray(arr) && arr.length) return { words: arr, error: null };
+    } catch {}
+    return { words: null, error: "no words in transcript.json" };
+  } finally {
+    rmSync(td, { recursive: true, force: true });
   }
-  rmSync(td, { recursive: true, force: true });
-  return words;
+}
+
+// `transcribe --json` prints {ok:false, reason|error, install?} on stdout.
+function transcribeFailure({ status, stdout = "", stderr = "" }) {
+  try {
+    const j = JSON.parse(stdout.trim().split("\n").pop());
+    const why = j.reason || j.error;
+    if (why) return j.install ? `${why}; install: ${j.install}` : why;
+  } catch {}
+  const tail = stderr.trim().split("\n").pop();
+  return tail ? `exit ${status}: ${tail}` : `exit ${status}`;
 }
 
 // ── tiny local utils ──────────────────────────────────────────────────────────
