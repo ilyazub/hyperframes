@@ -21,6 +21,7 @@ export function compileCutList(transcript, opts = {}) {
   const removals = [
     ...parseTimeRanges(opts.remove),
     ...wordIndexRanges(words, opts.removeWords),
+    ...textRanges(words, opts.removeText),
     ...fillerRanges(words, opts.removeFillers),
     ...silenceRanges(words, opts.cutSilence),
   ];
@@ -32,6 +33,7 @@ function hasRemovalSource(opts) {
   return (
     opts.remove != null ||
     opts.removeWords != null ||
+    opts.removeText != null ||
     opts.removeFillers != null ||
     opts.cutSilence != null
   );
@@ -93,6 +95,44 @@ function wordIndexRanges(words, value) {
         throw new Error(`word range out of bounds: ${range}`);
       }
       return { start: words[startIndex].start, end: words[endIndex].end };
+    });
+}
+
+// A phrase must occur exactly once: an ambiguous cut is refused, never guessed.
+function textRanges(words, value) {
+  if (value == null || value === false || value === "") return [];
+  const folded = (text) =>
+    bareToken(
+      String(text)
+        .normalize("NFC")
+        .replace(/[\u2019\u02bc]/g, "'"),
+    );
+  const tokens = [];
+  words.forEach((word, index) => {
+    const token = folded(word.text);
+    if (token) tokens.push({ token, index });
+  });
+  return String(value)
+    .split("|")
+    .map((phrase) => phrase.trim())
+    .filter(Boolean)
+    .map((phrase) => {
+      const target = phrase.split(/\s+/).map(folded).filter(Boolean);
+      if (target.length === 0) throw new Error(`empty phrase: ${phrase}`);
+      const hits = [];
+      for (let i = 0; i + target.length <= tokens.length; i++) {
+        if (target.every((t, k) => tokens[i + k].token === t)) {
+          hits.push([tokens[i].index, tokens[i + target.length - 1].index]);
+        }
+      }
+      if (hits.length === 0) throw new Error(`not found: ${phrase}`);
+      if (hits.length > 1) {
+        const where = hits.map(([a, b]) => `${a}-${b}`).join(", ");
+        throw new Error(
+          `ambiguous: ${phrase} occurs ${hits.length} times (${where}); use --remove-words`,
+        );
+      }
+      return { start: words[hits[0][0]].start, end: words[hits[0][1]].end };
     });
 }
 
