@@ -8,7 +8,7 @@ export interface ToolContext {
   projectLock?: { waitMs: number };
 }
 
-export type ArtifactRole = "contact-sheet" | "frame" | "finding" | "check-report";
+export type ArtifactRole = "contact-sheet" | "frame" | "finding" | "check-report" | "render";
 
 interface ArtifactCreatedEvent {
   version: typeof TOOL_CONTEXT_VERSION;
@@ -54,6 +54,10 @@ const MEDIA_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".json": "application/json",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".gif": "image/gif",
 };
 
 export function reportArtifacts(
