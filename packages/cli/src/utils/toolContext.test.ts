@@ -89,6 +89,17 @@ describe("reportArtifacts", () => {
     ]);
   });
 
+  it("types render outputs", () => {
+    const path = join(temporary(), "events.ndjson");
+    const outputs = ["a.mp4", "a.webm", "a.mov", "a.gif"].map((name) => `/p/${name}`);
+    reportArtifacts("render", "render", outputs, { events: { path } });
+    const types = readFileSync(path, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line).artifact.mediaType);
+    expect(types).toEqual(["video/mp4", "video/webm", "video/quicktime", "image/gif"]);
+  });
+
   it("writes nothing without the events capability, and only warns when the file is unwritable", () => {
     expect(() => reportArtifacts("snapshot", "frame", ["/p/a.png"], {})).not.toThrow();
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
