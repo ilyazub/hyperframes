@@ -2,6 +2,8 @@ import { EventEmitter } from "node:events";
 import {
   closeSync,
   constants,
+  linkSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -105,4 +107,41 @@ describe("background-removal output", () => {
       }
     },
   );
+});
+
+describe("background-removal refuses to overwrite its input", () => {
+  // Each case names `dir/in.webm` (the input) through a different alias.
+  it.skipIf(process.platform === "win32").each([
+    ["--output, directly", "output", "in.webm"],
+    ["--output, through a .. segment", "output", "sub/../in.webm"],
+    ["--output, through a symlinked directory", "output", "link/in.webm"],
+    ["--output, through a hard link", "output", "hard.webm"],
+    ["--background-output, through a symlinked directory", "background", "link/in.webm"],
+  ])("%s", async (_name, which, alias) => {
+    const dir = mkdtempSync(join(tmpdir(), "hf-bg-removal-"));
+    try {
+      mkdirSync(join(dir, "sub"));
+      symlinkSync(dir, join(dir, "link"));
+      const input = join(dir, "in.webm");
+      writeFileSync(input, "source");
+      linkSync(input, join(dir, "hard.webm"));
+      spawnMock.mockClear();
+
+      const target = join(dir, alias);
+      const run =
+        which === "output"
+          ? render({ inputPath: input, outputPath: target })
+          : render({
+              inputPath: input,
+              outputPath: join(dir, "cutout.webm"),
+              backgroundOutputPath: target,
+            });
+
+      await expect(run).rejects.toThrow(/is the input file/);
+      expect(spawnMock).not.toHaveBeenCalled();
+      expect(readFileSync(input, "utf-8")).toBe("source");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

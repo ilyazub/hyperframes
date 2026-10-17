@@ -9,6 +9,7 @@ import {
   renameSync,
   mkdtempSync,
   rmSync,
+  statSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
@@ -66,6 +67,17 @@ if (!existsSync(inputPath)) {
 const outPath = resolve(
   args.out || `${inputPath.slice(0, -extname(inputPath).length)}.transcribe.json`,
 );
+if (sameFile(inputPath, outPath)) {
+  console.error("error: --out is the --input file; write the transcript to a new path");
+  process.exit(2);
+}
+
+// dev+ino also matches symlinked dirs, case-insensitive names and hard links.
+function sameFile(a, b) {
+  const x = statSync(a, { throwIfNoEntry: false });
+  const y = statSync(b, { throwIfNoEntry: false });
+  return !!x && !!y && x.dev === y.dev && x.ino === y.ino;
+}
 
 // Locate the parakeet-mlx runner the same way the CLI does: env override, then
 // the documented ~/.venvs/parakeet install, then PATH. Checking the venv (not

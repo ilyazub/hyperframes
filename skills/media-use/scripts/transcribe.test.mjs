@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -110,3 +118,49 @@ test(
     }
   },
 );
+
+for (const [name, alias] of [
+  ["directly", (root) => join(root, "in.wav")],
+  ["through a symlinked directory", (root) => join(root, "link", "in.wav")],
+]) {
+  test(
+    `--out naming the --input file ${name} is refused`,
+    { skip: process.platform === "win32" },
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "media-use-transcribe-"));
+      try {
+        const bin = join(root, "bin");
+        mkdirSync(bin);
+        writeFileSync(
+          join(bin, "npx"),
+          `#!/bin/sh\nwhile [ "$1" != "--dir" ]; do shift; done\necho '[]' > "$2/transcript.json"\n` +
+            `echo '{"ok":true,"engine":"whisper"}'\n`,
+        );
+        chmodSync(join(bin, "npx"), 0o755);
+        symlinkSync(root, join(root, "link"));
+        const input = join(root, "in.wav");
+        writeFileSync(input, "RIFF");
+        const script = fileURLToPath(new URL("./transcribe.mjs", import.meta.url));
+        const res = spawnSync(
+          process.execPath,
+          [script, "--input", input, "--engine", "whisper", "--out", alias(root), "--json"],
+          {
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              PATH: `${bin}:${process.env.PATH}`,
+              HOME: root,
+              HYPERFRAMES_MEDIA_HOME: join(root, "home"),
+              HYPERFRAMES_NO_TELEMETRY: "1",
+            },
+          },
+        );
+        assert.equal(readFileSync(input, "utf8"), "RIFF", "the input file was overwritten");
+        assert.equal(res.status, 2, res.stderr || res.stdout);
+        assert.match(res.stderr, /--out is the --input file/);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+}
