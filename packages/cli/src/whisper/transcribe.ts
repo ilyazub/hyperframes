@@ -260,6 +260,7 @@ export interface WhisperOptions {
   installRuntime?: boolean;
   model?: string;
   language?: string;
+  prompt?: string;
   onProgress?: (message: string) => void;
   onEvent?: (event: TranscribeProgress) => void;
   /** Called as whisper starts, so a stop during install or download still ends the CLI at once. */
@@ -517,6 +518,7 @@ export async function transcribe(
     "--suppress-nst",
   ];
   whisperArgs.push("--language", language);
+  if (options?.prompt) whisperArgs.push("--prompt", options.prompt);
   const onEvent = options?.onEvent;
   if (onEvent) whisperArgs.push("--print-progress");
   whisperArgs.push(wavPath);

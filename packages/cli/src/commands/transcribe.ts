@@ -20,6 +20,10 @@ export const examples: Example[] = [
   ["Transcribe a video file", "hyperframes transcribe video.mp4"],
   ["Use a larger model for better accuracy", "hyperframes transcribe audio.mp3 --model medium.en"],
   ["Set language to filter non-target speech", "hyperframes transcribe audio.mp3 --language en"],
+  [
+    "Spell names and terms right (whisper only)",
+    'hyperframes transcribe talk.mp4 --language uk --engine whisper --prompt "Кінг-Джордж, ООН"',
+  ],
   ["Import an existing SRT file", "hyperframes transcribe subtitles.srt"],
   ["Import an OpenAI Whisper JSON response", "hyperframes transcribe response.json"],
   ["Export captions to SRT", "hyperframes transcribe transcript.json --to srt"],
@@ -64,6 +68,11 @@ export default defineCommand({
       description:
         "Language code (e.g. en, es, ja). Whisper transcribes as this language; Parakeet, used when it covers it, detects the language itself.",
       alias: "l",
+    },
+    prompt: {
+      type: "string",
+      description:
+        "Initial prompt for whisper, such as a comma-separated glossary of the names and terms the audio uses, spelled as you want them. Whisper only: Parakeet takes no prompt, so under Parakeet it is ignored with a note.",
     },
     json: {
       type: "boolean",
@@ -120,6 +129,7 @@ export default defineCommand({
         engine: args.engine,
         model: args.model,
         language: args.language,
+        prompt: args.prompt,
         installRuntime: args["runtime-install"],
         timeoutMs: readTimeout(args.timeout)?.ms,
         captions: { format: args.to, outputPath: args.output, preserveCues: args["preserve-cues"] },
@@ -127,7 +137,7 @@ export default defineCommand({
         onStatus: json ? undefined : (message) => ui.spin?.message(message),
         onProgress: json ? createProgressWriter(process.stderr) : undefined,
         onEngine: (event) => {
-          ui.spin = showEngine(event, ui.spin, { json, model: args.model });
+          ui.spin = showEngine(event, ui.spin, { json, model: args.model, prompt: args.prompt });
         },
       });
     } catch (err) {
@@ -166,7 +176,7 @@ function readTimeout(
 function showEngine(
   event: TranscribeEngineEvent,
   spin: Spinner | null,
-  opts: { json: boolean; model?: string },
+  opts: { json: boolean; model?: string; prompt?: string },
 ): Spinner | null {
   // The requested model, as the spinner has always shown it; event.model is the one whisper runs.
   const label = c.accent(event.runner === "whisper" ? (opts.model ?? DEFAULT_MODEL) : "Parakeet");
@@ -176,11 +186,14 @@ function showEngine(
     spin?.start(`Transcribing with ${label}...`);
     return spin;
   }
-  // --model selects the whisper model only; Parakeet uses its own fixed model.
-  if (event.runner !== "whisper" && opts.model && !opts.json) {
+  // Parakeet takes no model choice or prompt; a dropped prompt changes the words, so --json notes it too.
+  const ignored = (flag: string) =>
     console.error(
-      c.dim(`  Note: --model applies to the whisper engine only; ignored under Parakeet.`),
+      c.dim(`  Note: --${flag} applies to the whisper engine only; ignored under Parakeet.`),
     );
+  if (event.runner !== "whisper") {
+    if (opts.model && !opts.json) ignored("model");
+    if (opts.prompt) ignored("prompt");
   }
   const started = opts.json ? null : clack.spinner();
   started?.start(`Transcribing with ${label}...`);
