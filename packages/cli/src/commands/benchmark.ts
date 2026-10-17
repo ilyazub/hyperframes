@@ -128,7 +128,13 @@ export default defineCommand({
             quality: config.quality,
             workers: config.workers,
           });
-          await producer.executeRenderJob(job, project.dir, outputPath);
+          const logToStdout = console.log;
+          if (jsonOutput) console.log = console.error;
+          try {
+            await producer.executeRenderJob(job, project.dir, outputPath);
+          } finally {
+            console.log = logToStdout;
+          }
           const elapsedMs = Date.now() - startTime;
 
           let fileSize: number | null = null;
