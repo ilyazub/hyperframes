@@ -145,6 +145,20 @@ resolve --from talk.cut.mp4 --type video
 
 Use `--plan` first when you want to inspect the kept segment JSON before encoding.
 
+Cut by what was said, not by word index. `--remove-text` takes a phrase (several
+separated by `|`); matching ignores case, punctuation and apostrophe style, and
+the cut happens only when the phrase occurs exactly once. If it is ambiguous the
+error lists the index ranges, so retry with `--remove-words`. Fillers work in any
+language, e.g. Ukrainian or Russian:
+
+```bash
+node <SKILL_DIR>/scripts/transcript-cut.mjs --input talk.mp4 \
+  --transcript talk.transcribe.json \
+  --remove-text "ну тобто" \
+  --remove-fillers "ем,ну,типу,короче" \
+  --out talk.cut.mp4
+```
+
 ## Ducking (declare in-composition / bake for export)
 
 B1, declare ducking in the composition. `audio-duck.mjs` emits a volume lane

@@ -15,6 +15,7 @@ const { values: args } = parseArgs({
     transcript: { type: "string" },
     remove: { type: "string" },
     "remove-words": { type: "string" },
+    "remove-text": { type: "string" },
     "remove-fillers": { type: "string" },
     "cut-silence": { type: "string" },
     keep: { type: "string" },
@@ -38,6 +39,7 @@ Options:
   --transcript        JSON word transcript, array or { words: [...] }
   --remove            Time ranges to remove, seconds: a-b,c-d
   --remove-words      Word-index ranges to remove: 12-18,40-41
+  --remove-text       Phrase(s) to remove by spoken text, a|b; each must occur exactly once
   --remove-fillers    Comma list of filler words to remove
   --cut-silence       Remove inter-word gaps longer than this many seconds
   --keep              Inverse mode: direct kept ranges, mutually exclusive with removal
@@ -56,6 +58,7 @@ try {
     remove_fillers: !!args["remove-fillers"],
     cut_silence: !!args["cut-silence"],
     ranges: !!args.remove,
+    remove_text: !!args["remove-text"],
     keep: !!args.keep,
   });
 } catch (err) {
@@ -70,6 +73,7 @@ function run() {
   const segments = compileCutList(transcript, {
     remove: args.remove,
     removeWords: args["remove-words"],
+    removeText: args["remove-text"],
     removeFillers: args["remove-fillers"],
     cutSilence: args["cut-silence"],
     keep: args.keep,
