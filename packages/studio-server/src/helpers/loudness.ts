@@ -436,6 +436,8 @@ export function updateAudioVolume(html: string, id: string, volume: number): str
   return html.slice(0, insertion) + ` data-volume="${value}"` + html.slice(insertion);
 }
 
+const EBUR128_AS_PLAYED = "ebur128=peak=true:dualmono=true";
+
 /**
  * FFmpeg arguments that measure exactly the window the composition plays.
  *
@@ -451,7 +453,7 @@ export function loudnessMeasureArgs(file: string, tag: MeasuredWindow): string[]
   if (tag.mediaStart > 0) args.push("-ss", String(tag.mediaStart));
   const sourceSpan = tag.duration === null ? null : tag.duration * (tag.playbackRate ?? 1);
   if (sourceSpan !== null && sourceSpan > 0) args.push("-t", String(sourceSpan));
-  args.push("-i", file, "-map", "0:a:0", "-vn", "-af", "ebur128=peak=true", "-f", "null", "-");
+  args.push("-i", file, "-map", "0:a:0", "-vn", "-af", EBUR128_AS_PLAYED, "-f", "null", "-");
   return args;
 }
 

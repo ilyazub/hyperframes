@@ -57,6 +57,11 @@ describe("assertKnownFlags", () => {
     expect(ok(["--", "--anything-goes-here"])).not.toThrow();
   });
 
+  it("accepts a negative number as a flag value (`--lufs -14`)", () => {
+    expect(ok(["--workers", "-14"])).not.toThrow();
+    expect(ok(["--workers", "-0.5"])).not.toThrow();
+  });
+
   it("checks each char of a combined short group", () => {
     expect(ok(["-ow"])).not.toThrow(); // both known aliases
     expect(ok(["-ox"])).toThrow(/Unknown flag: -x/); // x unknown
@@ -100,6 +105,10 @@ describe("guardSwallowedFlagValues", () => {
 
   it("does not reject an ordinary value, even one that starts with a dash but isn't a known flag", () => {
     expect(guard(["--output", "-out.mp4"])).not.toThrow();
+  });
+
+  it("does not reject a negative number value as a swallowed flag", () => {
+    expect(guard(["--workers", "-14"])).not.toThrow();
   });
 
   it("does not reject a trailing bare string flag with nothing after it", () => {
