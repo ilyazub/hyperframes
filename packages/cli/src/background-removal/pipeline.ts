@@ -15,7 +15,7 @@
  */
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { renameSync, rmSync } from "node:fs";
+import { renameSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { findFFmpeg, findFFprobe, getFFmpegInstallHint } from "../browser/ffmpeg.js";
 import { createSession, type Session } from "./inference.js";
@@ -285,6 +285,12 @@ export async function render(options: RenderOptions): Promise<RenderResult> {
     options.outputPath,
     options.backgroundOutputPath,
   );
+  if (sameFile(options.inputPath, options.outputPath)) {
+    throw new Error("--output is the input file; write the cutout to a new path.");
+  }
+  if (options.backgroundOutputPath && sameFile(options.inputPath, options.backgroundOutputPath)) {
+    throw new Error("--background-output is the input file; write the plate to a new path.");
+  }
 
   const media = await probeMedia(options.inputPath);
 
@@ -333,6 +339,13 @@ export async function render(options: RenderOptions): Promise<RenderResult> {
     rmSync(output, { force: true, maxRetries: 3 });
     if (background) rmSync(background, { force: true, maxRetries: 3 });
   }
+}
+
+// dev+ino also matches ".." paths, symlinked dirs, case-insensitive names and hard links.
+function sameFile(a: string, b: string): boolean {
+  const x = statSync(a, { throwIfNoEntry: false });
+  const y = statSync(b, { throwIfNoEntry: false });
+  return !!x && !!y && x.dev === y.dev && x.ino === y.ino;
 }
 
 /** ffmpeg follows a link planted at its output mid-job; a fresh unguessable name renamed over the output cannot. */

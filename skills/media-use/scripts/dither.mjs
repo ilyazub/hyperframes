@@ -2,7 +2,7 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
@@ -73,7 +73,7 @@ async function run() {
   const inputPath = resolve(args.input);
   const outPath = resolve(args.out);
   if (!existsSync(inputPath)) throw new Error(`input file not found: ${inputPath}`);
-  if (inputPath === outPath) throw new Error("--out must differ from --input");
+  if (sameFile(inputPath, outPath)) throw new Error("--out must differ from --input");
 
   const metadata = probe(inputPath);
   if (metadata.colorTransfer === "smpte2084" || metadata.colorTransfer === "arib-std-b67") {
@@ -115,6 +115,13 @@ async function run() {
     contrast: options.contrast,
     detail: options.detail,
   };
+}
+
+// dev+ino also matches symlinked dirs, case-insensitive names and hard links.
+function sameFile(a, b) {
+  const x = statSync(a, { throwIfNoEntry: false });
+  const y = statSync(b, { throwIfNoEntry: false });
+  return !!x && !!y && x.dev === y.dev && x.ino === y.ino;
 }
 
 function probe(filePath) {

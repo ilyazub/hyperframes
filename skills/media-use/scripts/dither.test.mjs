@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -174,3 +175,23 @@ test("rejects tagged PQ or HLG instead of silently producing SDR", { skip: !HAS_
   assert.equal(result.status, 1);
   assert.match(JSON.parse(result.stdout).error, /HDR arib-std-b67 input is not supported/);
 });
+
+test(
+  "--out naming the --input file through a symlinked directory is refused",
+  { skip: !HAS_FFMPEG },
+  (t) => {
+    const { dir, cleanup } = fixture();
+    t.after(cleanup);
+    const input = join(dir, "source.png");
+    ffmpeg(["-f", "lavfi", "-i", "testsrc2=size=16x12:rate=1", "-frames:v", "1", input]);
+    symlinkSync(dir, join(dir, "link"));
+    const sha256 = () => createHash("sha256").update(readFileSync(input)).digest("hex");
+    const before = sha256();
+
+    const result = run(["--input", input, "--out", join(dir, "link", "source.png")]);
+
+    assert.equal(sha256(), before, "the input file was overwritten");
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(JSON.parse(result.stdout).error, /--out must differ from --input/);
+  },
+);
