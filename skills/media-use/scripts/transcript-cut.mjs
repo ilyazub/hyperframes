@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -86,6 +95,8 @@ function run() {
 
   const inputPath = resolve(args.input);
   const outPath = resolve(args.out);
+  if (existsSync(outPath) && sameFile(inputPath, outPath))
+    throw new Error("--out is the --input file; write the cut to a new path");
   mkdirSync(dirname(outPath), { recursive: true });
   const tmpDir = mkdtempSync(join(tmpdir(), "media-use-cut-"));
   const keptSeconds = sumDurations(segments);
@@ -179,6 +190,13 @@ function run() {
     )}s)`,
   );
   console.log(`next: resolve --from ${outPath} --type <type>`);
+}
+
+// dev+ino also matches ".." paths, symlinked dirs, case-insensitive names and hard links.
+function sameFile(a, b) {
+  const x = statSync(a);
+  const y = statSync(b);
+  return x.dev === y.dev && x.ino === y.ino;
 }
 
 function cutSegment(inputPath, segment, outPath, copy, fade) {
