@@ -142,6 +142,7 @@ describe("transcribe", () => {
       engine: "whisper",
       model: "small.en",
       detectedLanguage: "es",
+      requestedLanguage: null,
       wordCount: 1,
       durationSeconds: 2,
       speechOnsetSeconds: null,

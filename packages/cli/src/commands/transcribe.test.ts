@@ -314,6 +314,8 @@ echo '{"sentences":[{"tokens":[{"text":" hola","start":0,"end":1}]}]}' > "$2/$(b
           engine: "parakeet",
           word: "hola",
         });
+        // Parakeet names no language, so the JSON echoes the requested one instead.
+        expect(lastJson()).toMatchObject({ detectedLanguage: null, requestedLanguage: "es" });
       },
     );
 
