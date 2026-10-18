@@ -45,9 +45,8 @@ import {
 } from "../templates/generators.js";
 import { fetchRemoteTemplate } from "../templates/remote.js";
 import { trackInitTemplate } from "../telemetry/events.js";
-import { DEFAULT_MODEL, hasFFmpeg } from "../whisper/manager.js";
+import { hasFFmpeg } from "../whisper/manager.js";
 import { TRANSCRIPT_FILE } from "../whisper/transcriptFile.js";
-import { initialModelForLanguage } from "../whisper/transcribe.js";
 import { findFFmpeg, findFFprobe, getFFmpegInstallHint } from "../browser/ffmpeg.js";
 import { VERSION } from "../version.js";
 import {
@@ -183,8 +182,6 @@ function probeVideo(filePath: string): VideoMeta | undefined {
 function isWebCompatible(codec: string): boolean {
   return WEB_CODECS.has(codec.toLowerCase());
 }
-
-// hasFFmpeg is imported from whisper/manager.ts to avoid duplication
 
 export function transcodeToMp4(inputPath: string, outputPath: string): Promise<boolean> {
   return new Promise((resolvePromise) => {
@@ -377,6 +374,19 @@ function patchVideoSrc(dir: string, media: InitMediaOptions): void {
   for (const file of htmlFiles) {
     writeFileSync(file, patchMediaPlaceholders(readFileSync(file, "utf-8"), media), "utf-8");
   }
+}
+
+async function transcribeMedia(
+  input: string,
+  dir: string,
+  model: string | undefined,
+  language: string | undefined,
+  onStatus?: (message: string) => void,
+): Promise<{ engine: string; wordCount: number; durationSeconds: number }> {
+  const { runTranscribe } = await import("../api/transcribe.js");
+  const result = await runTranscribe({ input, dir, model, language, onStatus });
+  if (result.kind !== "transcribed") throw new Error(`Not an audio or video file: ${input}`);
+  return result;
 }
 
 async function patchTranscript(dir: string, transcriptPath: string): Promise<void> {
@@ -716,7 +726,7 @@ export default defineCommand({
     },
     "skip-transcribe": {
       type: "boolean",
-      description: "Skip whisper transcription",
+      description: "Skip transcription",
     },
     "keep-original": {
       type: "boolean",
@@ -730,7 +740,7 @@ export default defineCommand({
     language: {
       type: "string",
       description:
-        "Language code for transcription (e.g. en, es, ja). Filters out non-target speech.",
+        "Language code for transcription (e.g. en, es, ja). Whisper transcribes as this language; Parakeet, used when installed and it covers it, detects the language itself.",
     },
     "non-interactive": {
       type: "boolean",
@@ -802,10 +812,6 @@ export default defineCommand({
     const nonInteractive = args["non-interactive"] === true || args.agent === true;
     const modelFlag = args.model;
     const languageFlag = args.language;
-    const initialTranscriptionModel = initialModelForLanguage(
-      modelFlag ?? DEFAULT_MODEL,
-      languageFlag,
-    );
     const interactive = !nonInteractive && process.stdout.isTTY === true;
 
     if (skipSkillsFlagIgnored) {
@@ -898,20 +904,12 @@ export default defineCommand({
         console.log(`Audio: ${basename(audioPath)}`);
       }
 
-      // Transcribe
       if (sourceFilePath && !skipTranscribe) {
         try {
-          const { ensureWhisper, ensureModel } = await import("../whisper/manager.js");
-          await ensureWhisper();
-          await ensureModel(initialTranscriptionModel);
           console.log("Transcribing...");
-          const { transcribe: runTranscribe } = await import("../whisper/transcribe.js");
-          const result = await runTranscribe(sourceFilePath, destDir, {
-            model: modelFlag,
-            language: languageFlag,
-          });
+          const result = await transcribeMedia(sourceFilePath, destDir, modelFlag, languageFlag);
           console.log(
-            `Transcribed: ${result.wordCount} words (${result.durationSeconds.toFixed(1)}s)`,
+            `Transcribed: ${result.wordCount} words (${result.durationSeconds.toFixed(1)}s) with ${result.engine}`,
           );
           if (!videoDuration) videoDuration = result.durationSeconds;
         } catch (err) {
@@ -1082,37 +1080,19 @@ export default defineCommand({
         initialValue: true,
       });
       if (!clack.isCancel(transcribeChoice) && transcribeChoice) {
-        const { findWhisper } = await import("../whisper/manager.js");
-        const needsInstall = findWhisper() === undefined;
-        if (needsInstall) {
-          clack.log.info(c.dim("whisper-cpp not found — installing automatically..."));
-        }
-
         const spin = clack.spinner();
-        spin.start(
-          needsInstall
-            ? "Installing whisper-cpp (this may take a moment)..."
-            : "Preparing transcription...",
-        );
+        spin.start("Preparing transcription...");
         try {
-          const { ensureWhisper, ensureModel } = await import("../whisper/manager.js");
-          await ensureWhisper({
-            onProgress: (msg) => spin.message(msg),
-          });
-          await ensureModel(initialTranscriptionModel, {
-            onProgress: (msg) => spin.message(msg),
-          });
-
-          spin.message("Transcribing audio...");
-          const { transcribe: runTranscribe } = await import("../whisper/transcribe.js");
-          const transcribeResult = await runTranscribe(sourceFilePath, destDir, {
-            model: modelFlag,
-            language: languageFlag,
-            onProgress: (msg) => spin.message(msg),
-          });
+          const transcribeResult = await transcribeMedia(
+            sourceFilePath,
+            destDir,
+            modelFlag,
+            languageFlag,
+            (msg) => spin.message(msg),
+          );
           spin.stop(
             c.success(
-              `Transcribed ${transcribeResult.wordCount} words (${transcribeResult.durationSeconds.toFixed(1)}s)`,
+              `Transcribed ${transcribeResult.wordCount} words (${transcribeResult.durationSeconds.toFixed(1)}s) with ${transcribeResult.engine}`,
             ),
           );
         } catch (err) {

@@ -298,6 +298,7 @@ function reportResult(result: TranscribeResult, json: boolean, spin: Spinner | n
         engine: result.engine,
         model: result.model,
         detectedLanguage: result.detectedLanguage,
+        requestedLanguage: result.requestedLanguage,
         wordCount: result.wordCount,
         durationSeconds: result.durationSeconds,
         speechOnsetSeconds: result.speechOnsetSeconds,

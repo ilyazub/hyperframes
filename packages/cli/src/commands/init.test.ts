@@ -22,7 +22,6 @@ import {
 } from "./init.js";
 
 const cliEntry = resolve(fileURLToPath(import.meta.url), "..", "..", "cli.ts");
-const initSource = readFileSync(new URL("./init.ts", import.meta.url), "utf-8");
 const tailwindScript =
   '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js" integrity="sha384-v5YF9xS+gLRWdvrQ0u/WRbCkjSIH0NjHIPe8tBL1ZRrmI7PiSH6LLdzs0aAIMCuh" crossorigin="anonymous"></script>';
 
@@ -30,13 +29,16 @@ const tailwindScript =
 // TypeScript-aware runtime. vitest runs under node, so `process.execPath`
 // would be node and couldn't load the entry. This repo hard-depends on bun
 // (package.json scripts), so assuming it's on PATH is safe.
-function runInit(args: string[]): { status: number; stdout: string; stderr: string } {
+function runInit(
+  args: string[],
+  env: Record<string, string> = {},
+): { status: number; stdout: string; stderr: string } {
   const res = spawnSync("bun", ["run", cliEntry, "init", ...args], {
     encoding: "utf-8",
     timeout: 30_000,
     // The `--skip-skills` flag is neutered (see init.ts); the GitHub skills check
     // is opted out only via this env var, so tests stay offline and fast.
-    env: { ...process.env, HYPERFRAMES_SKIP_SKILLS: "1" },
+    env: { ...process.env, HYPERFRAMES_SKIP_SKILLS: "1", ...env },
   });
   return {
     status: res.status ?? -1,
@@ -59,13 +61,47 @@ function expectScaffoldedScripts(target: string): void {
 }
 
 describe("hyperframes init flag rename", () => {
-  it("selects the language-compatible model before both eager init downloads", () => {
-    expect(initSource).toMatch(
-      /const initialTranscriptionModel = initialModelForLanguage\(\s*modelFlag \?\? DEFAULT_MODEL,\s*languageFlag,?\s*\);/,
-    );
-    expect(initSource.match(/await ensureModel\(initialTranscriptionModel/g)).toHaveLength(2);
-    expect(initSource).not.toMatch(/await ensureModel\(modelFlag/g);
-  });
+  it.skipIf(process.platform === "win32")(
+    "transcribes --video with Parakeet when whisper-cpp is missing, like `transcribe`",
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), "hf-init-parakeet-"));
+      const target = join(dir, "proj");
+      const clip = join(dir, "clip.mp4");
+      copyFileSync(
+        resolve(
+          fileURLToPath(import.meta.url),
+          "../../../../studio/tests/e2e/fixtures/design-panel-qa/assets/test.mp4",
+        ),
+        clip,
+      );
+      // A stand-in parakeet-mlx; the empty HOME hides any real sherpa-onnx Parakeet install.
+      const stub = join(dir, "parakeet-mlx");
+      writeFileSync(
+        stub,
+        `#!/bin/sh
+[ "$1" = --help ] && exit 0
+in=$1; while [ $# -gt 0 ]; do [ "$1" = --output-dir ] && out=$2; shift; done
+stem=$(basename "$in"); stem=\${stem%.*}
+printf '{"sentences":[{"tokens":[{"text":" Привіт","start":0.1,"end":0.5}]}]}' > "$out/$stem.json"
+`,
+      );
+      chmodSync(stub, 0o755);
+      try {
+        const res = runInit([target, "--non-interactive", "--video", clip, "--language", "uk"], {
+          HOME: dir,
+          USERPROFILE: dir,
+          HYPERFRAMES_PARAKEET: stub,
+        });
+        expect(res.status).toBe(0);
+        expect(res.stdout).toContain("Transcribed: 1 words");
+        expect(res.stdout).toContain("with parakeet");
+        const words = JSON.parse(readFileSync(join(target, "transcript.json"), "utf-8"));
+        expect(words).toMatchObject([{ text: "Привіт", start: 0.1, end: 0.5 }]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("bare init scaffolds the centered blank without --example", () => {
     const dir = mkdtempSync(join(tmpdir(), "hf-init-test-"));

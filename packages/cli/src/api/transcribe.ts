@@ -98,6 +98,7 @@ export type TranscribeResult =
       engine: "parakeet" | "whisper";
       model: string;
       detectedLanguage: string | null;
+      requestedLanguage: string | null;
       wordCount: number;
       durationSeconds: number;
       speechOnsetSeconds: number | null;
@@ -486,6 +487,7 @@ async function transcribeAudio(
       engine: engineOf(runner),
       model: result.model,
       detectedLanguage: result.detectedLanguage,
+      requestedLanguage: options.language ?? null,
       wordCount: words.length,
       durationSeconds: result.durationSeconds,
       speechOnsetSeconds: result.speechOnsetSeconds,

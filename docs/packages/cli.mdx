@@ -109,14 +109,16 @@ npx hyperframes init my-video --tailwind
 | `--audio, -a`       | Path to an audio file (MP3, WAV, M4A)                                                                                                                                                                                                                                                |
 | `--tailwind`        | Add Tailwind CSS browser-runtime support to the scaffolded HTML                                                                                                                                                                                                                      |
 | `--non-interactive` | Never prompt. For agents and CI.                                                                                                                                                                                                                                                     |
-| `--skip-transcribe` | Skip the automatic Whisper transcription                                                                                                                                                                                                                                             |
+| `--skip-transcribe` | Skip the automatic transcription                                                                                                                                                                                                                                                     |
 | `--keep-original`   | Copy the `--video` file as is instead of converting a non-web codec to H.264 MP4                                                                                                                                                                                                     |
 | `--model`           | Whisper model for that transcription (for example `small.en`, `medium.en`, `large`)                                                                                                                                                                                                   |
-| `--language`        | Language code for transcription (`en`, `es`, `ja`, …). Filters out speech in other languages.                                                                                                                                                                                         |
+| `--language`        | Language code for transcription (`en`, `es`, `ja`, …). Whisper transcribes as this language; Parakeet detects the language itself.                                                                                                                                                    |
 | `--skip-skills`     | Currently ignored. Set `HYPERFRAMES_SKIP_SKILLS=1` to opt out in CI or tests.                                                                                                                                                                                                         |
 
-Pass `--video` or `--audio` and the CLI transcribes the audio with Whisper and
-patches the captions into the composition for you. `--skip-transcribe` turns
+Pass `--video` or `--audio` and the CLI transcribes the audio, choosing the
+engine the way [`transcribe`](#transcribe) does under `--engine auto` (Parakeet
+when installed and it covers `--language`, whisper.cpp otherwise), and patches
+the captions into the composition for you. `--skip-transcribe` turns
 that off.
 
 `--tailwind` injects the pinned Tailwind v4 browser runtime and exposes a
@@ -299,7 +301,7 @@ npx hyperframes transcribe video.mp4 --to vtt
 | `--dir, -d`       | Project directory (default: current directory)                                                                                                                                                     |
 | `--engine, -e`    | ASR engine: `auto` (default — Parakeet if installed and the language is one of its 25, else whisper), `parakeet` (fails if Parakeet is missing, broken, or lacks the `--language`), or `whisper` |
 | `--model, -m`     | Whisper model (default `small.en`): `tiny.en`, `base.en`, `small.en`, `medium.en`, `large-v3`                                                                                                       |
-| `--language, -l`  | Language code (`en`, `es`, `ja`, …). Whisper transcribes as this language; Parakeet, used when it covers it, detects the language itself.                                                          |
+| `--language, -l`  | Language code (`en`, `es`, `ja`, …). Whisper transcribes as this language; Parakeet, used when it covers it, detects the language itself. `--json` echoes it as `requestedLanguage`; `detectedLanguage` is whisper's own detection, so it is `null` with `--language` or under Parakeet, which reports no language. |
 | `--to`            | Write an `srt` or `vtt` sidecar: from a transcript file it exports instead of importing; from audio or video it is written beside `transcript.json`, with cues for languages without spaces grouped, which exporting that `transcript.json` later may split differently |
 | `--output, -o`    | Where the exported SRT/VTT goes                                                                                                                                                                    |
 | `--preserve-cues` | Keep each transcript entry as its own caption cue, skipping word-level grouping                                                                                                                    |
