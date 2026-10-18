@@ -105,6 +105,15 @@ it.each([
   const result = await transcribe(join(dir, "audio.wav"), dir, { model, language });
   expect(result).toMatchObject({ detectedLanguage: null, model: resolved });
 });
+it("passes --prompt to whisper-cli only when a prompt is given", async () => {
+  const argsOf = () => native.exec.mock.calls.find(([command]) => command === "whisper-cli")![1];
+  await transcribe(join(dir, "audio.wav"), dir, { model: "small", prompt: "ДТП, ООН" });
+  const args = argsOf();
+  expect(args[args.indexOf("--prompt") + 1]).toBe("ДТП, ООН");
+  native.exec.mockClear();
+  await transcribe(join(dir, "audio.wav"), dir, { model: "small", prompt: "" });
+  expect(argsOf()).not.toContain("--prompt");
+});
 it("keeps an absent native language unknown", async () => {
   native.missingLanguage = true;
   expect(await transcribe(join(dir, "audio.wav"), dir, { model: "small" })).toMatchObject({

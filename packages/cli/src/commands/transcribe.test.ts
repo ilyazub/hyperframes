@@ -317,6 +317,30 @@ echo '{"sentences":[{"tokens":[{"text":" hola","start":0,"end":1}]}]}' > "$2/$(b
       },
     );
 
+    it("--prompt reaches whisper, and under Parakeet is noted and ignored instead of failing", async () => {
+      const prompt = "Кінг-Джордж, ООН";
+      for (const [engine, mlx] of [
+        ["whisper", false],
+        ["auto", true],
+      ] as const) {
+        Object.assign(runners, { sherpa: false, mlx });
+        const { dir, input } = dummyAudio();
+        dirs.push(dir);
+        await transcribeCmd.run!({ args: { input, json: true, engine, prompt } } as never);
+        expect(lastJson()).toMatchObject({ ok: true, engine: mlx ? "parakeet" : "whisper" });
+      }
+      expect(transcribeMock).toHaveBeenCalledExactlyOnceWith(
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({ prompt }),
+      );
+      const notes = vi.mocked(console.error).mock.calls.map(([line]) => String(line));
+      expect(
+        notes.filter((line) => line.includes("--prompt applies to the whisper engine only")),
+      ).toHaveLength(1);
+      expect(consumeCommandResult().exitCode).toBe(0);
+    });
+
     it("auto uses Parakeet only for a language it transcribes", async () => {
       const both = { sherpa: true, mlx: true };
       expect(await transcribeWith("auto", both, "ja")).toMatchObject({ engine: "whisper" });

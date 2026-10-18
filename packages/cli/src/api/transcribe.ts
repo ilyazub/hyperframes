@@ -72,6 +72,7 @@ export interface TranscribeOptions {
   /** Whisper model. Parakeet has its own fixed model. */
   model?: string;
   language?: string;
+  prompt?: string;
   /** Allow installing the whisper runtime. Model downloads are always allowed. */
   installRuntime?: boolean;
   /** Whisper spawn timeout, at least MIN_TIMEOUT_MS. Default: scaled to audio length and model. */
@@ -415,6 +416,7 @@ async function transcribeAudio(
         return transcribeWithWhisper(wavPath, dir, {
           model,
           language: options.language,
+          prompt: options.prompt,
           onProgress: onStatus,
           onEvent: onProgress,
           timeoutMs: options.timeoutMs,
