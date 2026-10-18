@@ -43,8 +43,16 @@ function longFlagName(tok: string): string {
   return name.startsWith("no-") ? name.slice(3) : name;
 }
 
+function isNumericValue(tok: string): boolean {
+  return Number.isFinite(Number(tok));
+}
+
+function isFlagToken(tok: string): boolean {
+  return tok !== "-" && tok.startsWith("-") && !isNumericValue(tok);
+}
+
 function unknownFlagIn(tok: string, known: Set<string>): string | null {
-  if (tok === "-" || !tok.startsWith("-")) return null; // positional or flag value
+  if (!isFlagToken(tok)) return null; // positional or flag value
   if (tok.startsWith("--")) {
     const name = longFlagName(tok);
     return name && !known.has(name) ? `--${name}` : null;
@@ -135,7 +143,7 @@ export interface SwallowGuardResult {
 
 // End of argv and a bare `-` (stdin) are never a swallow; `--` or a known flag spelling is.
 function looksLikeSwallowedFlag(next: string | undefined, known: Set<string>): boolean {
-  if (next === undefined || next === "-") return false;
+  if (next === undefined || next === "-" || isNumericValue(next)) return false;
   return next === "--" || (next.startsWith("-") && unknownFlagIn(next, known) === null);
 }
 
