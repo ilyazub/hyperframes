@@ -27,6 +27,7 @@ import { ambiguousIssue, type MotionFrame } from "./motionAudit.js";
 import type { LayoutIssue, LayoutIssueCode, LayoutRect } from "./layoutAudit.js";
 import { serveStaticProjectHtml } from "./staticProjectServer.js";
 import { collectTweenRecords, findTweenTails, tweenTailMessage } from "./gsapTweenTails.js";
+import { auditGlyphCoverage } from "./glyphCoverage.js";
 import { resolveAutoProxy } from "./projectConfig.js";
 import {
   decideMediaProxyEligibility,
@@ -246,6 +247,9 @@ export async function runBrowserCheck(
     for (const tail of findTweenTails((await page.evaluate(collectTweenRecords)) ?? [])) {
       const message = tweenTailMessage(tail);
       drafts.push({ code: "gsap_tween_tail", severity: "warning", message, time: tail.later.end });
+    }
+    for (const message of await auditGlyphCoverage(page)) {
+      drafts.push({ code: "font_missing_glyphs", severity: "warning", message, time: 0 });
     }
     const driver = createPageDriver(page, (time) => {
       currentTime = time;
