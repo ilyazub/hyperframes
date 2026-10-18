@@ -63,6 +63,7 @@ import { freemem, tmpdir } from "node:os";
 import { resolve, dirname, join, basename } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { loadProducer } from "../utils/producer.js";
+import { reportArtifacts } from "../utils/toolContext.js";
 import { c } from "../ui/colors.js";
 import { desktopHint } from "../utils/desktopApp.js";
 import {
@@ -772,6 +773,11 @@ function resolveDockerHostPlatform(options: RenderOptions): string {
   return platform;
 }
 
+function reportRenderOutput(outputPath: string, format: RenderFormat): void {
+  if (format === "png-sequence" || format === "hls") return;
+  reportArtifacts("render", "render", [outputPath]);
+}
+
 async function registerRenderOutputOrWarn(projectDir: string, outputPath: string): Promise<void> {
   await registerRenderOutput(projectDir, outputPath).catch((error: unknown) =>
     console.warn(`Render output was not registered: ${normalizeErrorMessage(error)}`),
@@ -880,6 +886,7 @@ async function renderDocker(
   // so any late throw here (telemetry flush, feedback prompt) cannot flip
   // the exit code.
   markRenderSucceeded();
+  reportRenderOutput(outputPath, options.format);
   await runPostRenderStepAsync("recordRenderSuccess", () =>
     recordRenderSuccess(projectDir, outputPath, "completed", capture).then(() => {}),
   );
@@ -1158,6 +1165,7 @@ async function executeLocalRender(
   // the exit code. Field signal ts=1784169760 / ts=1784171150 / ts=1784172467
   // (win32/x64, CLI 0.7.58): valid MP4 on disk, exited 1 with no error print.
   markRenderSucceeded();
+  reportRenderOutput(outputPath, options.format);
   await runPostRenderStepAsync("recordRenderSuccess", () =>
     recordRenderSuccess(
       projectDir,
